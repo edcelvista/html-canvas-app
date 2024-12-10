@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+  <meta name="author" content="Edcel Vista">
+  <title>Residential Status</title>
+</head>
+<body>
+    <canvas style="position: absolute; top: 0; left: 0;" id="backgroundCanvas" width="2560" height="1695"></canvas>
+    <canvas style="position: absolute; top: 0; left: 0;" id="foregroundCanvas" width="2560" height="1695"></canvas>
+
+    <div id="contextMenu" style="display: none;">
+        <div style="text-align: center; padding: 8px; height: 15px; background: white; color: black; font-weight: 800;">Actions</div>
+        <div id="downloadBtn"      onclick="triggerSave();"                              onmouseover="triggerAnnotateSubOut(event);" style="cursor: pointer; padding: 2px 10px 2px 10px; border-bottom: 1px solid #fff;">Download</div>
+        <div id="holdBtn"          onclick="triggerStateUpdate(event, 'Hold');"          onmouseover="triggerAnnotateSubOut(event);" style="display: none;">Hold</div>
+        <div id="conditionalBtn"   onclick="triggerStateUpdate(event, 'Conditional');"   onmouseover="triggerAnnotateSubOut(event);" style="display: none;">Conditional</div>
+        <div id="unconditionalBtn" onclick="triggerStateUpdate(event, 'Unconditional');" onmouseover="triggerAnnotateSubOut(event);" style="display: none;">Unconditional</div>
+        <div id="settledBtn"       onclick="triggerStateUpdate(event, 'Settled');"       onmouseover="triggerAnnotateSubOut(event);" style="display: none;">Settled</div>
+        <div id="availableBtn"     onclick="triggerStateUpdate(event, 'Available');"     onmouseover="triggerAnnotateSubOut(event);" style="display: none;">Available</div>
+        <div id="annotateBtn"      onmouseover="triggerAnnotateSub(event);"                                                          style="display: none;">Annotate >></div>
+        <div id="deleteBtn"        onclick="triggerDelete(event);"                       onmouseover="triggerAnnotateSubOut(event);" style="display: none;">Delete</div>
+    </div>
+
+    <div id="contextMenuSub" style="display: none;">
+        <div style="text-align: center; padding: 8px; height: 15px; background: black; color: white; font-weight: 800;">Annotate</div>
+        <input id="annotationTxt"      onclick="stopClickPropagation(event);" style="margin: 5px; font-size: 19px; width: 92%;">
+        <button id="annotationSaveBtn" onclick="saveAnnotation(event);"       style="margin: 0px 6px 0px 0px; float: right;">Save</button>
+    </div>
+
+    <div id="contextInfo" style="display: none;">
+        <div style="text-align: center; padding: 8px; height: 15px; background: black; color: white; font-weight: 800;">Recent Information</div>
+        <div id="contextInfoContent" style="margin: 10px 15px 15px 15px;"></div>
+    </div>
+
+    <div id="errorDiv" style="display: none;"><h4>Something went wrong.</h4>&nbsp;<small>Check Parameters...</small></div>
+
+    <script type="text/javascript">
+        try {
+            // Get query string from the current URL
+            const queryString = window.location.search;
+
+            // Parse query parameters
+            const params = new URLSearchParams(queryString);
+
+            // Example: Access specific parameters
+            const resort         = params.get('resort');
+            const statusDataFile = params.get('statusfile');
+
+            let curSelectedIndexRec       = undefined;
+            let sourceDataEndpoint        = `${window.location.origin}`
+            let dataJsonfileName          = `${resort}.json`;
+            let statusDataCSVfileName     = statusDataFile == undefined ? `STATUS.csv` : statusDataFile;
+            let statusDataCSVSkipRows     = 6; // skip headers
+            let statusDataCSVHeader       = 5; // header rowd
+            let minimumRectangle          = 24;
+            let isDebug                   = false;
+            let capturedLocations         = [];
+            let defaultRectColor          = "#cec2c2";
+
+            let errorDiv                  = document.getElementById('errorDiv');
+            let contextMenu               = document.getElementById('contextMenu');
+            let contextMenuSub            = document.getElementById('contextMenuSub');
+            let contextInfo               = document.getElementById('contextInfo');
+            let contextInfoContent        = document.getElementById('contextInfoContent');
+            let annotationTxt             = document.getElementById('annotationTxt');
+            let annotationSaveBtn         = document.getElementById('annotationSaveBtn');
+
+            let downloadBtn               = document.getElementById('downloadBtn');
+            let annotateBtn               = document.getElementById('annotateBtn');
+            let holdBtn                   = document.getElementById('holdBtn');
+            let conditionalBtn            = document.getElementById('conditionalBtn');
+            let unconditionalBtn          = document.getElementById('unconditionalBtn');
+            let settledBtn                = document.getElementById('settledBtn');
+            let availableBtn              = document.getElementById('availableBtn');
+            let deleteBtn                 = document.getElementById('deleteBtn');
+
+            let backgroundCanvas          = document.getElementById('backgroundCanvas');
+            const ctx_b                   = backgroundCanvas.getContext('2d');
+
+            let foregroundCanvas          = document.getElementById('foregroundCanvas');
+            const ctx_f                   = foregroundCanvas.getContext('2d');
+
+            let startX, startY, isDrawing = false;
+
+            let colorMapping              = {
+                                                "Hold": "#ead41c",
+                                                "Conditional": "#1c73fa",
+                                                "Unconditional": "#d00000",
+                                                "Settled": "#1de545",
+                                                "Available": "#969996",
+                                            };
+
+            // Data Loaders
+            fetch(`${sourceDataEndpoint}/${dataJsonfileName}?time=${Date.now()}`).then(response => {
+                if (!response.ok){
+                    errorDiv.setAttribute('style', `display: flex; justify-content: center; align-items: center; height: 100vh;`);
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            }).then(data => { 
+                capturedLocations = data; 
+                dispatchArrayUpdateEvent();
+            }).catch(error => {
+                errorDiv.setAttribute('style', `display: flex; justify-content: center; align-items: center; height: 100vh;`);
+                console.error('There was a problem with the fetch operation:', error);
+            });
+
+            fetch(`${sourceDataEndpoint}/${statusDataCSVfileName}?time=${Date.now()}`).then(response => {
+                if (!response.ok){
+                    errorDiv.setAttribute('style', `display: flex; justify-content: center; align-items: center; height: 100vh;`);
+                    throw new Error('Network response was not ok');
+                }
+                return response.text();
+            }).then(data => { 
+                const rows    = data.split('\n');  // Split CSV by line breaks
+                const headers = rows[statusDataCSVHeader].split(',');  // Get headers from the first row
+                const result  = [];
+
+                // Loop through the rest of the rows and map to an object
+                for (let i = statusDataCSVSkipRows; i < rows.length; i++) {
+                    const values = rows[i].split(',');  // Split each row by commas
+                    if (values.length === headers.length) {
+                        let obj = {};
+                        for (let j = 0; j < headers.length; j++) {
+                            obj[headers[j]] = values[j];
+                        }
+                        result.push(obj);
+                    }
+                }
+
+                for (let i = 0; i < result.length; i++) {
+                    const jobLotNumber = result[i]["Job Number"];
+                    const foundIndex   = capturedLocations.findIndex((element, index) => element.annotation.trim().toLowerCase() == jobLotNumber.trim().toLowerCase());
+                    if (foundIndex > -1){
+                        if (result[i]["Latest Activity Completed"].trim() !== "" && result[i]["Date Last Activity Completed"].trim() !== ""){
+                            capturedLocations[foundIndex].remarks = `${result[i]["Client Name"]}, ${result[i]["Latest Activity Completed"]} - ${result[i]["Date Last Activity Completed"]}`;
+                        }else{
+                            capturedLocations[foundIndex].remarks = `${result[i]["Client Name"]}`;
+                        }
+
+                        if (result[i]["Handover to Sales"] !== ""){
+                            capturedLocations[foundIndex].color = colorMapping["Settled"];
+                        }else if (result[i]["Send Job To Site"] === ""){
+                            capturedLocations[foundIndex].color = colorMapping["Hold"];
+                        }
+                        dispatchArrayUpdateEvent();
+                    }
+                }
+            }).catch(error => {
+                errorDiv.setAttribute('style', `display: flex; justify-content: center; align-items: center; height: 100vh;`);
+                console.error('There was a problem with the fetch operation:', error);
+            });
+
+            // Function to trigger click at specific coordinates (x, y)
+            function triggerClickAt(x, y) {
+                const event = new MouseEvent("click", {
+                    bubbles: true,         // Event can bubble up
+                    cancelable: true,      // Event can be canceled
+                    clientX: x,            // X coordinate of the click
+                    clientY: y             // Y coordinate of the click
+                });
+
+                // Dispatch the click event at the specified coordinates
+                document.dispatchEvent(event);  // You can change this to any specific element if needed
+            }
+            
+            // stop click event from registering 
+            function stopClickPropagation(e){
+                e.stopPropagation();
+            }
+            
+            // Event for annotateBtn Click
+            function triggerStateUpdate(e, state){
+                const indexToUpdate = e.target.getAttribute('actionIndex');
+                if(indexToUpdate){
+                    switch (state) {
+                        case 'Hold':
+                            capturedLocations[indexToUpdate].color = colorMapping[state]
+                            dispatchArrayUpdateEvent();
+                            break;
+                        case 'Conditional':
+                            capturedLocations[indexToUpdate].color = colorMapping[state]
+                            dispatchArrayUpdateEvent();
+                            break;
+                        case 'Unconditional':
+                            capturedLocations[indexToUpdate].color = colorMapping[state]
+                            dispatchArrayUpdateEvent();
+                            break;
+                        case 'Settled':
+                            capturedLocations[indexToUpdate].color = colorMapping[state]
+                            dispatchArrayUpdateEvent();
+                            break;
+                        case 'Available':
+                            capturedLocations[indexToUpdate].color = colorMapping[state]
+                            dispatchArrayUpdateEvent();
+                            break;
+                    }
+                }
+            }
+
+            // Save textbox annotated
+            function saveAnnotation(e){
+                const indexToUpdate = e.target.getAttribute('actionIndex');
+                if(indexToUpdate && annotationTxt.value !== ""){
+                    capturedLocations[indexToUpdate].annotation = annotationTxt.value.trim()
+                }
+                closeContextMenu();
+                dispatchArrayUpdateEvent();
+            }
+
+            // Enter Event in annotation input
+            annotationTxt.addEventListener("keydown", function (event) { //HERE!!
+                if (event.key === "Enter") {
+                    const indexToUpdate = event.target.getAttribute('actionIndex');
+                    if(indexToUpdate && annotationTxt.value !== ""){
+                        capturedLocations[indexToUpdate].annotation = annotationTxt.value.trim()
+                    }
+                    closeContextMenu();
+                    dispatchArrayUpdateEvent();
+                }
+            });
+
+            // close context menu
+            function closeContextMenu(){
+                contextMenu.setAttribute('style', `position: absolute; display: none;`);
+                contextMenuSub.setAttribute('style', `position: absolute; display: none;`);
+                contextInfo.setAttribute('style', `position: absolute; display: none;`);
+            }
+
+            // Event for annotateBtn hover
+            function triggerAnnotateSub(e){
+                const indexToUpdate = e.target.getAttribute('actionIndex');
+                if(indexToUpdate){
+                    // Position the custom menu where the mouse was clicked
+                    const x = event.pageX + 30;
+                    const y = event.pageY;
+
+                    contextMenuSub.setAttribute('style', `background-color: white; color: black; width:218px; height: 97px; position: absolute; display: block; left: ${x}px; top: ${y}px;`);
+                }
+            }
+
+            // Event for annotateBtn mouse out
+            function triggerAnnotateSubOut(e){
+                const indexToUpdate = e.target.getAttribute('actionIndex');
+                if(indexToUpdate){
+                    contextMenuSub.setAttribute('style', `position: absolute; display: none;`);
+                }
+            }
+
+            // Event for downloadBtn click
+            function triggerSave(e){
+                const sanitizedRemarks = capturedLocations.map(obj => {
+                    const { ["remarks"]: _, ...rest } = obj;
+                    return rest;
+                });
+                const sanitizedColor = sanitizedRemarks.map(obj => ({
+                    ...obj,
+                    ["color"]: defaultRectColor
+                }));
+                saveToFile(JSON.stringify(sanitizedColor), dataJsonfileName);
+            }
+
+            // Save to file
+            function saveToFile(textToSave, fileName){
+                const blob = new Blob([textToSave], { type: 'application/json' }); // Create a Blob with the text
+                const url  = URL.createObjectURL(blob); // Create an object URL for the Blob
+                
+                const a    = document.createElement('a'); // Create an <a> element
+                a.href     = url; // Set the href to the Blob URL
+                a.download = fileName; // Set the default filename
+                a.click(); // Trigger the download
+                
+                // Clean up the URL object after the download is triggered
+                URL.revokeObjectURL(url);
+            }
+
+            // Event for deleteBtn click
+            function triggerDelete(e){
+                const self          = event.target;
+                const indexToDelete = self.getAttribute('actionIndex');
+                if(indexToDelete){
+                    capturedLocations.splice(indexToDelete, 1);
+                    dispatchArrayUpdateEvent();
+                    console.log(`Index Deleted : ${indexToDelete}`);
+                }
+            }
+
+            // Event Listener for array update
+            function dispatchArrayUpdateEvent() {
+                const event = new CustomEvent('arrayUpdated', { detail: capturedLocations });
+                document.dispatchEvent(event);
+                curSelectedIndexRec = undefined;
+            }
+
+            // Check if the mouse is inside a rectangle
+            function isInsideRectangle(rect, mouseX, mouseY) {
+                if (mouseX >= rect.x && mouseX <= rect.x + rect.width && mouseY >= rect.y && mouseY <= rect.y + rect.height){
+                    return rect;
+                }
+                return;
+            }
+
+            // # Init Background Canvas # | Create an image object
+            const backgroundImage = new Image();
+            backgroundImage.src   = `${resort}.jpeg`; // Replace with your image URL
+            // Draw the image onto the canvas once it's loaded
+            backgroundImage.onload = () => {
+                ctx_b.drawImage(backgroundImage, 0, 0, backgroundCanvas.width, backgroundCanvas.height);
+            };
+
+            // # Init Foreground Canvas #
+            foregroundCanvas.addEventListener("mousedown", function (e) {
+                isDrawing   = true;
+                const rect  = foregroundCanvas.getBoundingClientRect();
+                startX      = event.clientX - rect.left;
+                startY      = event.clientY - rect.top;
+            });
+            // Draw the rectangle
+            foregroundCanvas.addEventListener('mousemove', (event) => {
+                const rect     = foregroundCanvas.getBoundingClientRect();
+                const currentX = event.clientX - rect.left;
+                const currentY = event.clientY - rect.top;
+                if (!isDrawing) { // move without click
+                    let isHovered  = capturedLocations.findIndex(capturedLocation => currentX >= capturedLocation.x && currentX <= capturedLocation.x + capturedLocation.width && currentY >= capturedLocation.y && currentY <= capturedLocation.y + capturedLocation.height);
+                    if(isHovered > -1){ // return index if match hence 0 means first index not empty hence -1 >
+                        if("remarks" in capturedLocations[isHovered] && capturedLocations[isHovered].remarks !== ""){
+                            contextInfo.setAttribute('style', `background-color: white; color: black; width:218px; height: 97px; position: absolute; display: block; left: ${currentX}px; top: ${currentY}px;`);
+                            contextInfoContent.textContent = capturedLocations[isHovered].remarks;
+                        }
+                    }else{
+                        contextInfo.setAttribute('style', `position: absolute; display: none;`);
+                        contextInfoContent.textContent = "";
+                    }
+                   // dont draw if mouse not dragging
+                }else{ // move start with  click
+                    // Clear canvas and redraw the rectangle
+                    ctx_f.globalAlpha = 1;
+                    ctx_f.clearRect(0, 0, foregroundCanvas.width, foregroundCanvas.height);
+                    ctx_f.strokeStyle = 'orange';
+                    ctx_f.lineWidth   = 0.5;
+                    ctx_f.strokeRect(startX, startY, currentX - startX, currentY - startY);
+                }
+            });
+            // capture selected canvas
+            foregroundCanvas.addEventListener('click', (event) => {
+                const rect     = foregroundCanvas.getBoundingClientRect();
+                const currentX = event.clientX - rect.left;
+                const currentY = event.clientY - rect.top;
+            
+                let isHovered  = capturedLocations.findIndex(capturedLocation => currentX >= capturedLocation.x && currentX <= capturedLocation.x + capturedLocation.width && currentY >= capturedLocation.y && currentY <= capturedLocation.y + capturedLocation.height);
+
+                if(isHovered > -1){ // return index if match hence 0 means first index not empty hence -1 >
+                    // Position the button and show it
+                    annotateBtn.setAttribute('actionIndex', isHovered);
+                    holdBtn.setAttribute('actionIndex', isHovered);
+                    conditionalBtn.setAttribute('actionIndex', isHovered);
+                    unconditionalBtn.setAttribute('actionIndex', isHovered);
+                    settledBtn.setAttribute('actionIndex', isHovered);
+                    availableBtn.setAttribute('actionIndex', isHovered);
+                    deleteBtn.setAttribute('actionIndex', isHovered);
+                    annotateBtn.setAttribute('actionIndex', isHovered);
+                    annotationSaveBtn.setAttribute('actionIndex', isHovered);
+                    annotationTxt.setAttribute('actionIndex', isHovered);
+
+                    annotateBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                    holdBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                    conditionalBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                    unconditionalBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                    settledBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                    availableBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                    deleteBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+
+                    curSelectedIndexRec = isHovered
+                }else{
+                    // Hide the button if clicked outside
+                    annotateBtn.removeAttribute('actionIndex');
+                    holdBtn.removeAttribute('actionIndex');
+                    conditionalBtn.removeAttribute('actionIndex');
+                    unconditionalBtn.removeAttribute('actionIndex');
+                    settledBtn.removeAttribute('actionIndex');
+                    availableBtn.removeAttribute('actionIndex');
+                    deleteBtn.removeAttribute('actionIndex');
+                    annotateBtn.removeAttribute('actionIndex');
+                    annotationSaveBtn.removeAttribute('actionIndex');
+                    annotationTxt.removeAttribute('actionIndex');
+
+                    annotateBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                    holdBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                    conditionalBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                    unconditionalBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                    settledBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                    availableBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                    deleteBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+
+                    curSelectedIndexRec = undefined
+                }
+            });
+            // Finish drawing and get coordinates
+            foregroundCanvas.addEventListener('mouseup', (event) => {
+                isDrawing  = false;
+
+                const rect = foregroundCanvas.getBoundingClientRect();
+                const endX = event.clientX - rect.left;
+                const endY = event.clientY - rect.top;
+
+                if ((endY - startY) > minimumRectangle){ // dont save click only - only with 24px + height will be saved
+                    const rectCoordinates = {
+                        x: startX,
+                        y: startY,
+                        width: endX - startX,
+                        height: endY - startY,
+                        color: defaultRectColor,
+                        annotation: undefined
+                    };
+
+                    capturedLocations.push(rectCoordinates);
+                }
+                dispatchArrayUpdateEvent();
+            });
+
+            // Load Existing Data
+            document.addEventListener('arrayUpdated', function(e) {
+                ctx_f.clearRect(0, 0, foregroundCanvas.width, foregroundCanvas.height);
+                for (let i = 0; i < e.detail.length; i++) {
+                    const element     = e.detail[i];
+                    ctx_f.globalAlpha = 0.8;
+                    ctx_f.fillStyle   = curSelectedIndexRec !== undefined && curSelectedIndexRec == i ? `purple` :`${element.color}`;
+                    ctx_f.fillRect(element.x, element.y, element.width, element.height);
+
+                    if (element.hasOwnProperty('annotation')){
+                        if (element.annotation !== undefined){
+                            // Add text inside the rectangle
+                            const text      = element.annotation;
+                            ctx_f.fillStyle = 'white'; // Text color
+                            ctx_f.font      = '18px Arial'; // Font size and style
+
+                            // Calculate text position for centering inside the rectangle
+                            const textWidth = ctx_f.measureText(text).width;
+                            const textX     = element.x + (element.width - textWidth) / 2; // Center horizontally
+                            const textY     = element.y + (element.height / 2) + 6; // Center vertically (6 is approx for text baseline)
+                            
+                            ctx_f.globalAlpha = 1;
+                            ctx_f.fillText(text, textX, textY);
+                        }
+                    }
+
+                    if (isDebug){
+                        // Add text inside the rectangle
+                        const text      = `X: ${element.x}, Y: ${element.y} w: ${element.width}, h: ${element.height}`;
+                        ctx_f.fillStyle = 'white'; // Text color
+                        ctx_f.font      = '8px Arial'; // Font size and style
+
+                        // Calculate text position for centering inside the rectangle
+                        const textWidth = ctx_f.measureText(text).width;
+                        const textX     = element.x + (element.width - textWidth) / 2; // Center horizontally
+                        const textY     = element.y + (element.height / 2) + 6; // Center vertically (6 is approx for text baseline)
+                        
+                        ctx_f.globalAlpha = 1;
+                        ctx_f.fillText(text, textX, textY);
+                    }
+                }
+            });
+
+            // Show the custom menu on right-click
+            document.addEventListener('contextmenu', function(event) {
+                event.preventDefault(); // Prevent the default browser context menu
+
+                // Position the custom menu where the mouse was clicked
+                const x = event.pageX;
+                const y = event.pageY;
+
+                contextMenu.setAttribute('style', `background-color: black; color: #54ff00; width:118px; height: 178px; position: absolute; display: block; left: ${x}px; top: ${y}px;`);
+            });
+
+            // Hide the custom menu when clicking anywhere else
+            document.addEventListener('click', function(e) {
+                annotationTxt.value = '';
+                closeContextMenu();
+            });
+
+        } catch (error) {
+            errorDiv.setAttribute('style', `display: flex; justify-content: center; align-items: center; height: 100vh;`);
+        }
+    </script>
+</body>
+</html>
