@@ -91,68 +91,74 @@
                                                 "Settled": "#1de545",
                                                 "Available": "#969996",
                                             };
-
-            // Data Loaders
-            fetch(`${sourceDataEndpoint}/${dataJsonfileName}?time=${Date.now()}`).then(response => {
-                if (!response.ok){
+            
+            // Data Loader
+            window.onload = function() {
+                fetch(`${sourceDataEndpoint}/${dataJsonfileName}?time=${Date.now()}`).then(response => {
+                    if (!response.ok){
+                        errorDiv.setAttribute('style', `display: flex; justify-content: center; align-items: center; height: 100vh;`);
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                }).then(data => { 
+                    capturedLocations = data; 
+                    dispatchArrayUpdateEvent();
+                }).catch(error => {
                     errorDiv.setAttribute('style', `display: flex; justify-content: center; align-items: center; height: 100vh;`);
-                    throw new Error('Network response was not ok');
-                }
-                return response.json();
-            }).then(data => { 
-                capturedLocations = data; 
-                dispatchArrayUpdateEvent();
-            }).catch(error => {
-                errorDiv.setAttribute('style', `display: flex; justify-content: center; align-items: center; height: 100vh;`);
-                console.error('There was a problem with the fetch operation:', error);
-            });
+                    console.error('There was a problem with the fetch operation:', error);
+                });
 
-            fetch(`${sourceDataEndpoint}/${statusDataCSVfileName}?time=${Date.now()}`).then(response => {
-                if (!response.ok){
-                    errorDiv.setAttribute('style', `display: flex; justify-content: center; align-items: center; height: 100vh;`);
-                    throw new Error('Network response was not ok');
-                }
-                return response.text();
-            }).then(data => { 
-                const rows    = data.split('\n');  // Split CSV by line breaks
-                const headers = rows[statusDataCSVHeader].split(',');  // Get headers from the first row
-                const result  = [];
+                fetch(`${sourceDataEndpoint}/${statusDataCSVfileName}?time=${Date.now()}`).then(response => {
+                    if (!response.ok){
+                        errorDiv.setAttribute('style', `display: flex; justify-content: center; align-items: center; height: 100vh;`);
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.text();
+                }).then(data => { 
+                    const rows    = data.split('\n');  // Split CSV by line breaks
+                    const headers = rows[statusDataCSVHeader].split(',');  // Get headers from the first row
+                    const result  = [];
 
-                // Loop through the rest of the rows and map to an object
-                for (let i = statusDataCSVSkipRows; i < rows.length; i++) {
-                    const values = rows[i].split(',');  // Split each row by commas
-                    if (values.length === headers.length) {
+                    // Loop through the rest of the rows and map to an object
+                    for (let i = statusDataCSVSkipRows; i < rows.length; i++) {
+                        const regex = /,(?=(?:[^"]*"[^"]*")*[^"]*$)/; // Regex to match commas not inside quotes
+                        const values = rows[i].split(regex);  // Split each row by commas
                         let obj = {};
                         for (let j = 0; j < headers.length; j++) {
                             obj[headers[j]] = values[j];
                         }
                         result.push(obj);
                     }
-                }
 
-                for (let i = 0; i < result.length; i++) {
-                    const jobLotNumber = result[i]["Job Number"];
-                    const foundIndex   = capturedLocations.findIndex((element, index) => element.annotation.trim().toLowerCase() == jobLotNumber.trim().toLowerCase());
-                    if (foundIndex > -1){
-                        if (result[i]["Latest Activity Completed"].trim() !== "" && result[i]["Date Last Activity Completed"].trim() !== ""){
-                            capturedLocations[foundIndex].remarks = `${result[i]["Client Name"]}, ${result[i]["Latest Activity Completed"]} - ${result[i]["Date Last Activity Completed"]}`;
-                        }else{
-                            capturedLocations[foundIndex].remarks = `${result[i]["Client Name"]}`;
-                        }
+                    for (let i = 0; i < result.length; i++) {
+                        const jobLotNumber = result[i]["Job Number"];
+                        const foundIndex   = capturedLocations.findIndex((element, index) => element.annotation.trim().toLowerCase() == jobLotNumber.trim().toLowerCase());
+                        if (foundIndex > -1){
+                            if (result[i]["Latest Activity Completed"].trim() !== "" && result[i]["Date Last Activity Completed"].trim() !== ""){
+                                capturedLocations[foundIndex].remarks = `${jobLotNumber} - ${result[i]["Client Name"]}, ${result[i]["Latest Activity Completed"]} - ${result[i]["Date Last Activity Completed"]}`;
+                            }else{
+                                capturedLocations[foundIndex].remarks = `${jobLotNumber} - ${result[i]["Client Name"]}`;
+                            }
 
-                        if (result[i]["Handover to Sales"] !== ""){
-                            capturedLocations[foundIndex].color = colorMapping["Settled"];
-                        }else if (result[i]["Send Job To Site"] === ""){
-                            capturedLocations[foundIndex].color = colorMapping["Hold"];
+                            if (result[i]["Handover to Sales"] !== ""){
+                                capturedLocations[foundIndex].color = colorMapping["Settled"];
+                            }else if (result[i]["Send Job To Site"] === ""){
+                                capturedLocations[foundIndex].color = colorMapping["Hold"];
+                            }else{
+                                // for fun only
+                                const randomKey = capturedLocations[Math.floor(Math.random() * capturedLocations.length)];
+                                capturedLocations[foundIndex].color = colorMapping[randomKey];
+                            }
+                            dispatchArrayUpdateEvent();
                         }
-                        dispatchArrayUpdateEvent();
                     }
-                }
-            }).catch(error => {
-                errorDiv.setAttribute('style', `display: flex; justify-content: center; align-items: center; height: 100vh;`);
-                console.error('There was a problem with the fetch operation:', error);
-            });
-
+                    console.log(capturedLocations);
+                    console.log(result);
+                }).catch(error => {
+                    errorDiv.setAttribute('style', `display: flex; justify-content: center; align-items: center; height: 100vh;`);
+                    console.error('There was a problem with the fetch operation:', error);
+                });
+            };
             // Function to trigger click at specific coordinates (x, y)
             function triggerClickAt(x, y) {
                 const event = new MouseEvent("click", {
@@ -326,7 +332,7 @@
                     let isHovered  = capturedLocations.findIndex(capturedLocation => currentX >= capturedLocation.x && currentX <= capturedLocation.x + capturedLocation.width && currentY >= capturedLocation.y && currentY <= capturedLocation.y + capturedLocation.height);
                     if(isHovered > -1){ // return index if match hence 0 means first index not empty hence -1 >
                         if("remarks" in capturedLocations[isHovered] && capturedLocations[isHovered].remarks !== ""){
-                            contextInfo.setAttribute('style', `background-color: white; color: black; width:218px; height: 97px; position: absolute; display: block; left: ${currentX}px; top: ${currentY}px;`);
+                            contextInfo.setAttribute('style', `background-color: white; color: black; width:218px; position: absolute; display: block; left: ${currentX}px; top: ${currentY}px;`);
                             contextInfoContent.textContent = capturedLocations[isHovered].remarks;
                         }
                     }else{
@@ -336,10 +342,10 @@
                    // dont draw if mouse not dragging
                 }else{ // move start with  click
                     // Clear canvas and redraw the rectangle
-                    ctx_f.globalAlpha = 1;
+                    ctx_f.globalAlpha = 5;
                     ctx_f.clearRect(0, 0, foregroundCanvas.width, foregroundCanvas.height);
-                    ctx_f.strokeStyle = 'orange';
-                    ctx_f.lineWidth   = 0.5;
+                    ctx_f.strokeStyle = '#54ff00';
+                    ctx_f.lineWidth   = 1;
                     ctx_f.strokeRect(startX, startY, currentX - startX, currentY - startY);
                 }
             });
