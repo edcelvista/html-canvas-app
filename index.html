@@ -12,26 +12,27 @@
     <canvas style="position: absolute; top: 0; left: 0;" id="foregroundCanvas" width="2560" height="1695"></canvas>
 
     <div id="contextMenu" style="display: none;">
-        <div style="text-align: center; padding: 8px; height: 15px; background: white; color: black; font-weight: 800;">Actions</div>
-        <div id="downloadBtn"      onclick="triggerSave();"                              onmouseover="triggerAnnotateSubOut(event);" style="cursor: pointer; padding: 2px 10px 2px 10px; border-bottom: 1px solid #fff;">Download</div>
-        <div id="holdBtn"          onclick="triggerStateUpdate(event, 'Hold');"          onmouseover="triggerAnnotateSubOut(event);" style="display: none;">Hold</div>
-        <div id="conditionalBtn"   onclick="triggerStateUpdate(event, 'Conditional');"   onmouseover="triggerAnnotateSubOut(event);" style="display: none;">Conditional</div>
-        <div id="unconditionalBtn" onclick="triggerStateUpdate(event, 'Unconditional');" onmouseover="triggerAnnotateSubOut(event);" style="display: none;">Unconditional</div>
-        <div id="settledBtn"       onclick="triggerStateUpdate(event, 'Settled');"       onmouseover="triggerAnnotateSubOut(event);" style="display: none;">Settled</div>
-        <div id="availableBtn"     onclick="triggerStateUpdate(event, 'Available');"     onmouseover="triggerAnnotateSubOut(event);" style="display: none;">Available</div>
-        <div id="annotateBtn"      onmouseover="triggerAnnotateSub(event);"                                                          style="display: none;">Annotate >></div>
-        <div id="deleteBtn"        onclick="triggerDelete(event);"                       onmouseover="triggerAnnotateSubOut(event);" style="display: none;">Delete</div>
+        <div id="actionLabel"      style="text-align: center; padding: 8px; height: 15px; background: white; color: black; font-weight: 800;">Actions</div>
+        <div id="downloadBtn"      onclick="triggerSave();"                              onmouseover="contextMenuHide(event);" style="cursor: pointer; padding: 2px 10px 2px 10px; border-bottom: 1px solid #fff;">Save Data</div>
+        <div id="holdBtn"          onclick="triggerStateUpdate(event, 'Hold');"          onmouseover="contextMenuHide(event);" style="display: none;">Hold</div>
+        <div id="conditionalBtn"   onclick="triggerStateUpdate(event, 'Conditional');"   onmouseover="contextMenuHide(event);" style="display: none;">Conditional</div>
+        <div id="unconditionalBtn" onclick="triggerStateUpdate(event, 'Unconditional');" onmouseover="contextMenuHide(event);" style="display: none;">Unconditional</div>
+        <div id="settledBtn"       onclick="triggerStateUpdate(event, 'Settled');"       onmouseover="contextMenuHide(event);" style="display: none;">Settled</div>
+        <div id="availableBtn"     onclick="triggerStateUpdate(event, 'Available');"     onmouseover="contextMenuHide(event);" style="display: none;">Available</div>
+        <div id="annotateBtn"                                                            onmouseover="triggerAnnotateSub(event, 'infoBtn');"    style="display: none;">Annotate >></div>
+        <div id="deleteBtn"        onclick="triggerDelete(event);"                       onmouseover="contextMenuHide(event);" style="display: none;">Delete</div>
+        <div id="infoBtn"                                                                onmouseover="contextMenuHide(event, 'annotateBtn'); triggerInfoDetails(event);"    style="display: none;">Information >></div>
     </div>
 
-    <div id="contextMenuSub" style="display: none;">
+    <div id="contextMenuAnnotate" style="display: none;">
         <div style="text-align: center; padding: 8px; height: 15px; background: black; color: white; font-weight: 800;">Annotate</div>
-        <input id="annotationTxt"      onclick="stopClickPropagation(event);" style="margin: 5px; font-size: 19px; width: 92%;">
+        <input id="annotationTxt"      onclick="stopClickPropagation(event);" style="margin: 5px; font-size: 19px; width: 92%;" placeholder="Lot Number">
         <button id="annotationSaveBtn" onclick="saveAnnotation(event);"       style="margin: 0px 6px 0px 0px; float: right;">Save</button>
     </div>
 
-    <div id="contextInfo" style="display: none;">
+    <div id="contextMenuInfo" style="display: none;">
         <div style="text-align: center; padding: 8px; height: 15px; background: black; color: white; font-weight: 800;">Recent Information</div>
-        <div id="contextInfoContent" style="margin: 10px 15px 15px 15px;"></div>
+        <div id="contextMenuInfoContent" style="margin: 10px 15px 15px 15px;"></div>
     </div>
 
     <div id="errorDiv" style="display: none;"><h4>Something went wrong.</h4>&nbsp;<small>Check Parameters...</small></div>
@@ -58,12 +59,13 @@
             let isDebug                   = false;
             let capturedLocations         = [];
             let defaultRectColor          = "#cec2c2";
-
+            
+            let actionLabel               = document.getElementById('actionLabel');
             let errorDiv                  = document.getElementById('errorDiv');
             let contextMenu               = document.getElementById('contextMenu');
-            let contextMenuSub            = document.getElementById('contextMenuSub');
-            let contextInfo               = document.getElementById('contextInfo');
-            let contextInfoContent        = document.getElementById('contextInfoContent');
+            let contextMenuAnnotate       = document.getElementById('contextMenuAnnotate');
+            let contextMenuInfo           = document.getElementById('contextMenuInfo');
+            let contextMenuInfoContent    = document.getElementById('contextMenuInfoContent');
             let annotationTxt             = document.getElementById('annotationTxt');
             let annotationSaveBtn         = document.getElementById('annotationSaveBtn');
 
@@ -75,6 +77,7 @@
             let settledBtn                = document.getElementById('settledBtn');
             let availableBtn              = document.getElementById('availableBtn');
             let deleteBtn                 = document.getElementById('deleteBtn');
+            let infoBtn                   = document.getElementById('infoBtn');
 
             let backgroundCanvas          = document.getElementById('backgroundCanvas');
             const ctx_b                   = backgroundCanvas.getContext('2d');
@@ -84,13 +87,7 @@
 
             let startX, startY, isDrawing = false;
 
-            let colorMapping              = {
-                                                "Hold": "#ead41c",
-                                                "Conditional": "#1c73fa",
-                                                "Unconditional": "#d00000",
-                                                "Settled": "#1de545",
-                                                "Available": "#969996",
-                                            };
+            let colorMapping              = { "Hold": "#ead41c", "Conditional": "#1c73fa", "Unconditional": "#d00000", "Settled": "#1de545", "Available": "#969996" };
             
             // Data Loader
             window.onload = function() {
@@ -159,6 +156,7 @@
                     console.error('There was a problem with the fetch operation:', error);
                 });
             };
+            
             // Function to trigger click at specific coordinates (x, y)
             function triggerClickAt(x, y) {
                 const event = new MouseEvent("click", {
@@ -231,11 +229,11 @@
             // close context menu
             function closeContextMenu(){
                 contextMenu.setAttribute('style', `position: absolute; display: none;`);
-                contextMenuSub.setAttribute('style', `position: absolute; display: none;`);
-                contextInfo.setAttribute('style', `position: absolute; display: none;`);
+                contextMenuAnnotate.setAttribute('style', `position: absolute; display: none;`);
+                contextMenuInfo.setAttribute('style', `position: absolute; display: none;`);
             }
 
-            // Event for annotateBtn hover
+            // Event Annotate hover
             function triggerAnnotateSub(e){
                 const indexToUpdate = e.target.getAttribute('actionIndex');
                 if(indexToUpdate){
@@ -243,15 +241,26 @@
                     const x = event.pageX + 30;
                     const y = event.pageY;
 
-                    contextMenuSub.setAttribute('style', `background-color: white; color: black; width:218px; height: 97px; position: absolute; display: block; left: ${x}px; top: ${y}px;`);
+                    contextMenuAnnotate.setAttribute('style', `background-color: white; color: black; width:218px; height: 97px; position: absolute; display: block; left: ${x}px; top: ${y}px;`);
                 }
             }
 
             // Event for annotateBtn mouse out
-            function triggerAnnotateSubOut(e){
+            function contextMenuHide(e, type = "ALL"){
                 const indexToUpdate = e.target.getAttribute('actionIndex');
                 if(indexToUpdate){
-                    contextMenuSub.setAttribute('style', `position: absolute; display: none;`);
+                    switch (type) {
+                        case "infoBtn":
+                            contextMenuInfo.setAttribute('style', `position: absolute; display: none;`);
+                            break;
+                        case "annotateBtn":
+                            contextMenuAnnotate.setAttribute('style', `position: absolute; display: none;`);
+                            break;
+                        default:
+                            contextMenuAnnotate.setAttribute('style', `position: absolute; display: none;`);
+                            contextMenuInfo.setAttribute('style', `position: absolute; display: none;`);
+                            break;
+                    }
                 }
             }
 
@@ -266,6 +275,23 @@
                     ["color"]: defaultRectColor
                 }));
                 saveToFile(JSON.stringify(sanitizedColor), dataJsonfileName);
+            }
+
+            // Event Hover Info Hover
+            function triggerInfoDetails(e){
+                const indexToView = e.target.getAttribute('actionIndex');
+                if(indexToView){
+                    const rect     = foregroundCanvas.getBoundingClientRect();
+                    const currentX = e.clientX - rect.left;
+                    const currentY = e.clientY - rect.top;
+                    contextMenuInfo.setAttribute('style', `background-color: white; color: black; width:218px; position: absolute; display: block; left: ${currentX}px; top: ${currentY}px;`);
+
+                    if("remarks" in capturedLocations[indexToView] && capturedLocations[indexToView].remarks !== ""){
+                        contextMenuInfoContent.textContent = capturedLocations[indexToView].remarks;
+                    }else{
+                        contextMenuInfoContent.textContent = "No Available Information";
+                    }
+                }
             }
 
             // Save to file
@@ -296,8 +322,7 @@
             // Event Listener for array update
             function dispatchArrayUpdateEvent() {
                 const event = new CustomEvent('arrayUpdated', { detail: capturedLocations });
-                document.dispatchEvent(event);
-                curSelectedIndexRec = undefined;
+                document.dispatchEvent(event);                
             }
 
             // Check if the mouse is inside a rectangle
@@ -311,6 +336,7 @@
             // # Init Background Canvas # | Create an image object
             const backgroundImage = new Image();
             backgroundImage.src   = `${resort}.jpeg`; // Replace with your image URL
+            
             // Draw the image onto the canvas once it's loaded
             backgroundImage.onload = () => {
                 ctx_b.drawImage(backgroundImage, 0, 0, backgroundCanvas.width, backgroundCanvas.height);
@@ -318,27 +344,22 @@
 
             // # Init Foreground Canvas #
             foregroundCanvas.addEventListener("mousedown", function (e) {
-                isDrawing   = true;
-                const rect  = foregroundCanvas.getBoundingClientRect();
-                startX      = event.clientX - rect.left;
-                startY      = event.clientY - rect.top;
+                if (e.button === 0) { // 0 = left | 1 = middle | 2 = right
+                    isDrawing   = true;
+                    const rect  = foregroundCanvas.getBoundingClientRect();
+                    startX      = event.clientX - rect.left;
+                    startY      = event.clientY - rect.top;
+                }
+                closeContextMenu();
             });
+            
             // Draw the rectangle
             foregroundCanvas.addEventListener('mousemove', (event) => {
                 const rect     = foregroundCanvas.getBoundingClientRect();
                 const currentX = event.clientX - rect.left;
                 const currentY = event.clientY - rect.top;
                 if (!isDrawing) { // move without click
-                    let isHovered  = capturedLocations.findIndex(capturedLocation => currentX >= capturedLocation.x && currentX <= capturedLocation.x + capturedLocation.width && currentY >= capturedLocation.y && currentY <= capturedLocation.y + capturedLocation.height);
-                    if(isHovered > -1){ // return index if match hence 0 means first index not empty hence -1 >
-                        if("remarks" in capturedLocations[isHovered] && capturedLocations[isHovered].remarks !== ""){
-                            contextInfo.setAttribute('style', `background-color: white; color: black; width:218px; position: absolute; display: block; left: ${currentX}px; top: ${currentY}px;`);
-                            contextInfoContent.textContent = capturedLocations[isHovered].remarks;
-                        }
-                    }else{
-                        contextInfo.setAttribute('style', `position: absolute; display: none;`);
-                        contextInfoContent.textContent = "";
-                    }
+                    return;
                    // dont draw if mouse not dragging
                 }else{ // move start with  click
                     // Clear canvas and redraw the rectangle
@@ -349,60 +370,7 @@
                     ctx_f.strokeRect(startX, startY, currentX - startX, currentY - startY);
                 }
             });
-            // capture selected canvas
-            foregroundCanvas.addEventListener('click', (event) => {
-                const rect     = foregroundCanvas.getBoundingClientRect();
-                const currentX = event.clientX - rect.left;
-                const currentY = event.clientY - rect.top;
-            
-                let isHovered  = capturedLocations.findIndex(capturedLocation => currentX >= capturedLocation.x && currentX <= capturedLocation.x + capturedLocation.width && currentY >= capturedLocation.y && currentY <= capturedLocation.y + capturedLocation.height);
 
-                if(isHovered > -1){ // return index if match hence 0 means first index not empty hence -1 >
-                    // Position the button and show it
-                    annotateBtn.setAttribute('actionIndex', isHovered);
-                    holdBtn.setAttribute('actionIndex', isHovered);
-                    conditionalBtn.setAttribute('actionIndex', isHovered);
-                    unconditionalBtn.setAttribute('actionIndex', isHovered);
-                    settledBtn.setAttribute('actionIndex', isHovered);
-                    availableBtn.setAttribute('actionIndex', isHovered);
-                    deleteBtn.setAttribute('actionIndex', isHovered);
-                    annotateBtn.setAttribute('actionIndex', isHovered);
-                    annotationSaveBtn.setAttribute('actionIndex', isHovered);
-                    annotationTxt.setAttribute('actionIndex', isHovered);
-
-                    annotateBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                    holdBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                    conditionalBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                    unconditionalBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                    settledBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                    availableBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                    deleteBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-
-                    curSelectedIndexRec = isHovered
-                }else{
-                    // Hide the button if clicked outside
-                    annotateBtn.removeAttribute('actionIndex');
-                    holdBtn.removeAttribute('actionIndex');
-                    conditionalBtn.removeAttribute('actionIndex');
-                    unconditionalBtn.removeAttribute('actionIndex');
-                    settledBtn.removeAttribute('actionIndex');
-                    availableBtn.removeAttribute('actionIndex');
-                    deleteBtn.removeAttribute('actionIndex');
-                    annotateBtn.removeAttribute('actionIndex');
-                    annotationSaveBtn.removeAttribute('actionIndex');
-                    annotationTxt.removeAttribute('actionIndex');
-
-                    annotateBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                    holdBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                    conditionalBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                    unconditionalBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                    settledBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                    availableBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                    deleteBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-
-                    curSelectedIndexRec = undefined
-                }
-            });
             // Finish drawing and get coordinates
             foregroundCanvas.addEventListener('mouseup', (event) => {
                 isDrawing  = false;
@@ -476,16 +444,72 @@
                 // Position the custom menu where the mouse was clicked
                 const x = event.pageX;
                 const y = event.pageY;
-
-                contextMenu.setAttribute('style', `background-color: black; color: #54ff00; width:118px; height: 178px; position: absolute; display: block; left: ${x}px; top: ${y}px;`);
+                
+                contextMenu.setAttribute('style', `background-color: black; color: #54ff00; width:138px; height: 198px; position: absolute; display: block; left: ${x}px; top: ${y}px;`);
             });
 
-            // Hide the custom menu when clicking anywhere else
-            document.addEventListener('click', function(e) {
-                annotationTxt.value = '';
-                closeContextMenu();
-            });
+            // capture selected canvas
+            document.addEventListener('click', (event) => {
+                if (event.button === 0) { // 0 = left | 1 = middle | 2 = right
+                    const rect     = foregroundCanvas.getBoundingClientRect();
+                    const currentX = event.clientX - rect.left;
+                    const currentY = event.clientY - rect.top;
+                
+                    let isCanvasRectSelected  = capturedLocations.findIndex(capturedLocation => currentX >= capturedLocation.x && currentX <= capturedLocation.x + capturedLocation.width && currentY >= capturedLocation.y && currentY <= capturedLocation.y + capturedLocation.height);
 
+                    if(isCanvasRectSelected > -1){ // return index if match hence 0 means first index not empty hence -1 >
+                        // Position the button and show it
+                        holdBtn.setAttribute('actionIndex', isCanvasRectSelected);
+                        conditionalBtn.setAttribute('actionIndex', isCanvasRectSelected);
+                        unconditionalBtn.setAttribute('actionIndex', isCanvasRectSelected);
+                        settledBtn.setAttribute('actionIndex', isCanvasRectSelected);
+                        availableBtn.setAttribute('actionIndex', isCanvasRectSelected);
+                        annotateBtn.setAttribute('actionIndex', isCanvasRectSelected);
+                        annotationSaveBtn.setAttribute('actionIndex', isCanvasRectSelected);
+                        annotationTxt.setAttribute('actionIndex', isCanvasRectSelected);
+                        deleteBtn.setAttribute('actionIndex', isCanvasRectSelected);
+                        infoBtn.setAttribute('actionIndex', isCanvasRectSelected);
+
+                        holdBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        conditionalBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        unconditionalBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        settledBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        availableBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        annotateBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        deleteBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        infoBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+
+                        curSelectedIndexRec     = isCanvasRectSelected
+                        actionLabel.textContent = capturedLocations[curSelectedIndexRec].annotation
+                        dispatchArrayUpdateEvent();
+                    }else{
+                        // Hide the button if clicked outside
+                        holdBtn.removeAttribute('actionIndex');
+                        conditionalBtn.removeAttribute('actionIndex');
+                        unconditionalBtn.removeAttribute('actionIndex');
+                        settledBtn.removeAttribute('actionIndex');
+                        availableBtn.removeAttribute('actionIndex');
+                        annotateBtn.removeAttribute('actionIndex');
+                        annotationSaveBtn.removeAttribute('actionIndex');
+                        annotationTxt.removeAttribute('actionIndex');
+                        deleteBtn.removeAttribute('actionIndex');
+                        infoBtn.removeAttribute('actionIndex');
+                        
+                        holdBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        conditionalBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        unconditionalBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        settledBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        availableBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        annotateBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        deleteBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        infoBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+
+                        curSelectedIndexRec     = undefined
+                        actionLabel.textContent = "Action"
+                        dispatchArrayUpdateEvent();
+                    }
+                }
+            });
         } catch (error) {
             errorDiv.setAttribute('style', `display: flex; justify-content: center; align-items: center; height: 100vh;`);
         }
