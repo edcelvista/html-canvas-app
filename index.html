@@ -149,13 +149,26 @@
                             dispatchArrayUpdateEvent();
                         }
                     }
-                    console.log(capturedLocations);
-                    console.log(result);
                 }).catch(error => {
                     errorDiv.setAttribute('style', `display: flex; justify-content: center; align-items: center; height: 100vh;`);
                     console.error('There was a problem with the fetch operation:', error);
                 });
             };
+
+            // debounce
+            function debounce(fn, delay) {
+                let timeoutID;
+
+                return function (...args){
+                    if(timeoutID){
+                        clearTimeout(timeoutID);
+                    }
+                    
+                    timeoutID = setTimeout(function(){
+                        fn(...args);
+                    }, delay); 
+                }
+            }
             
             // Function to trigger click at specific coordinates (x, y)
             function triggerClickAt(x, y) {
@@ -215,7 +228,7 @@
             }
 
             // Enter Event in annotation input
-            annotationTxt.addEventListener("keydown", function (event) { //HERE!!
+            annotationTxt.addEventListener("keydown", debounce(function (event) { //HERE!!
                 if (event.key === "Enter") {
                     const indexToUpdate = event.target.getAttribute('actionIndex');
                     if(indexToUpdate && annotationTxt.value !== ""){
@@ -224,7 +237,7 @@
                     closeContextMenu();
                     dispatchArrayUpdateEvent();
                 }
-            });
+            }), 1000);
 
             // close context menu
             function closeContextMenu(){
@@ -446,10 +459,18 @@
                 const y = event.pageY;
                 
                 contextMenu.setAttribute('style', `background-color: black; color: #54ff00; width:138px; height: 198px; position: absolute; display: block; left: ${x}px; top: ${y}px;`);
+                annotationTxt.value = ""
             });
 
             // capture selected canvas
-            document.addEventListener('click', (event) => {
+            // annotationTxt.addEventListener("click", (event) => {
+            //     event.stopPropagation(); // Prevent the event from propagating to the parent
+            // });
+            document.addEventListener('click', debounce((event) => {
+                // disable propagate event if click to annotation textbox
+                if (event.target.id === "annotationTxt")
+                    return;
+
                 if (event.button === 0) { // 0 = left | 1 = middle | 2 = right
                     const rect     = foregroundCanvas.getBoundingClientRect();
                     const currentX = event.clientX - rect.left;
@@ -457,8 +478,7 @@
                 
                     let isCanvasRectSelected  = capturedLocations.findIndex(capturedLocation => currentX >= capturedLocation.x && currentX <= capturedLocation.x + capturedLocation.width && currentY >= capturedLocation.y && currentY <= capturedLocation.y + capturedLocation.height);
 
-                    if(isCanvasRectSelected > -1){ // return index if match hence 0 means first index not empty hence -1 >
-                        // Position the button and show it
+                    if(isCanvasRectSelected > -1){
                         holdBtn.setAttribute('actionIndex', isCanvasRectSelected);
                         conditionalBtn.setAttribute('actionIndex', isCanvasRectSelected);
                         unconditionalBtn.setAttribute('actionIndex', isCanvasRectSelected);
@@ -480,10 +500,9 @@
                         infoBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
 
                         curSelectedIndexRec     = isCanvasRectSelected
-                        actionLabel.textContent = capturedLocations[curSelectedIndexRec].annotation
+                        actionLabel.textContent = capturedLocations[curSelectedIndexRec].annotation ? capturedLocations[curSelectedIndexRec].annotation  : "Not Specified"
                         dispatchArrayUpdateEvent();
                     }else{
-                        // Hide the button if clicked outside
                         holdBtn.removeAttribute('actionIndex');
                         conditionalBtn.removeAttribute('actionIndex');
                         unconditionalBtn.removeAttribute('actionIndex');
@@ -509,7 +528,7 @@
                         dispatchArrayUpdateEvent();
                     }
                 }
-            });
+            }), 1000);
         } catch (error) {
             errorDiv.setAttribute('style', `display: flex; justify-content: center; align-items: center; height: 100vh;`);
         }
