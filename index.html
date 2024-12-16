@@ -14,11 +14,11 @@
     <div id="contextMenu" style="display: none;">
         <div id="actionLabel"      style="text-align: center; padding: 8px; height: 15px; background: white; color: black; font-weight: 800;">Actions</div>
         <div id="downloadBtn"      onclick="triggerSave();"                              onmouseover="contextMenuHide(event);" style="cursor: pointer; padding: 2px 10px 2px 10px; border-bottom: 1px solid #fff;">Save Data</div>
-        <div id="holdBtn"          onclick="triggerStateUpdate(event, 'Hold');"          onmouseover="contextMenuHide(event);" style="display: none;">Hold</div>
+        <!-- <div id="holdBtn"          onclick="triggerStateUpdate(event, 'Hold');"          onmouseover="contextMenuHide(event);" style="display: none;">Hold</div>
         <div id="conditionalBtn"   onclick="triggerStateUpdate(event, 'Conditional');"   onmouseover="contextMenuHide(event);" style="display: none;">Conditional</div>
         <div id="unconditionalBtn" onclick="triggerStateUpdate(event, 'Unconditional');" onmouseover="contextMenuHide(event);" style="display: none;">Unconditional</div>
         <div id="settledBtn"       onclick="triggerStateUpdate(event, 'Settled');"       onmouseover="contextMenuHide(event);" style="display: none;">Settled</div>
-        <div id="availableBtn"     onclick="triggerStateUpdate(event, 'Available');"     onmouseover="contextMenuHide(event);" style="display: none;">Available</div>
+        <div id="availableBtn"     onclick="triggerStateUpdate(event, 'Available');"     onmouseover="contextMenuHide(event);" style="display: none;">Available</div> -->
         <div id="annotateBtn"                                                            onmouseover="triggerAnnotateSub(event, 'infoBtn');"    style="display: none;">Annotate >></div>
         <div id="deleteBtn"        onclick="triggerDelete(event);"                       onmouseover="contextMenuHide(event);" style="display: none;">Delete</div>
         <div id="infoBtn"                                                                onmouseover="contextMenuHide(event, 'annotateBtn'); triggerInfoDetails(event);"    style="display: none;">Information >></div>
@@ -58,7 +58,8 @@
             let minimumRectangle          = 24;
             let isDebug                   = false;
             let capturedLocations         = [];
-            let defaultRectColor          = "#cec2c2";
+            let defaultRectColor          = "#489650";
+            let defaultSelColor           = "#000000";
             
             let actionLabel               = document.getElementById('actionLabel');
             let errorDiv                  = document.getElementById('errorDiv');
@@ -126,7 +127,7 @@
                         }
                         result.push(obj);
                     }
-
+                    console.log(result);
                     for (let i = 0; i < result.length; i++) {
                         const jobLotNumber = result[i]["Job Number"];
                         const foundIndex   = capturedLocations.findIndex((element, index) => element.annotation.trim().toLowerCase() == jobLotNumber.trim().toLowerCase());
@@ -137,15 +138,38 @@
                                 capturedLocations[foundIndex].remarks = `${jobLotNumber} - ${result[i]["Client Name"]}`;
                             }
 
-                            if (result[i]["Handover to Sales"] !== ""){
-                                capturedLocations[foundIndex].color = colorMapping["Settled"];
-                            }else if (result[i]["Send Job To Site"] === ""){
-                                capturedLocations[foundIndex].color = colorMapping["Hold"];
-                            }else{
-                                // for fun only
-                                const randomKey = capturedLocations[Math.floor(Math.random() * capturedLocations.length)];
-                                capturedLocations[foundIndex].color = colorMapping[randomKey];
+                            if (result[i]["Signed Documents Received"] !== ""){
+                                capturedLocations[foundIndex].color = "#e0dfdf";
                             }
+
+                            if (result[i]["Receive Signed Docs from Sales Upload OSC"] !== ""){
+                                capturedLocations[foundIndex].color = "#616161";
+                            }
+
+                            if (result[i]["Construction Issue Plans"] !== ""){
+                                capturedLocations[foundIndex].color = "#2135f3";
+                            }
+
+                            if (result[i]["Lodge for BA With Private Certifier"] !== ""){
+                                capturedLocations[foundIndex].color = "#ce77df";
+                            }
+ 
+                            if (result[i]["Receive BA"] !== ""){
+                                capturedLocations[foundIndex].color = "#c60aec";
+                            }
+
+                            if (result[i]["Send Job To Site"] !== ""){
+                                capturedLocations[foundIndex].color = "#f2b95f";
+                            }
+
+                            if (result[i]["Slab Pour"] !== ""){
+                                capturedLocations[foundIndex].color = "#ff9d00";
+                            }
+
+                            if (result[i]["Handover to Sales"] !== ""){
+                                capturedLocations[foundIndex].color = "#ffe000";
+                            }
+
                             dispatchArrayUpdateEvent();
                         }
                     }
@@ -413,7 +437,7 @@
                 for (let i = 0; i < e.detail.length; i++) {
                     const element     = e.detail[i];
                     ctx_f.globalAlpha = 0.8;
-                    ctx_f.fillStyle   = curSelectedIndexRec !== undefined && curSelectedIndexRec == i ? `purple` :`${element.color}`;
+                    ctx_f.fillStyle   = curSelectedIndexRec !== undefined && curSelectedIndexRec == i ? `${defaultSelColor}` :`${element.color}`;
                     ctx_f.fillRect(element.x, element.y, element.width, element.height);
 
                     if (element.hasOwnProperty('annotation')){
@@ -458,7 +482,7 @@
                 const x = event.pageX;
                 const y = event.pageY;
                 
-                contextMenu.setAttribute('style', `background-color: black; color: #54ff00; width:138px; height: 198px; position: absolute; display: block; left: ${x}px; top: ${y}px;`);
+                contextMenu.setAttribute('style', `background-color: black; color: #54ff00; width:138px; height: 108px; position: absolute; display: block; left: ${x}px; top: ${y}px;`);
                 annotationTxt.value = ""
             });
 
@@ -470,6 +494,10 @@
                 // disable propagate event if click to annotation textbox
                 if (event.target.id === "annotationTxt")
                     return;
+                if (event.target.id === "annotateBtn")
+                    return;
+                if (event.target.id === "infoBtn")
+                    return;
 
                 if (event.button === 0) { // 0 = left | 1 = middle | 2 = right
                     const rect     = foregroundCanvas.getBoundingClientRect();
@@ -479,22 +507,22 @@
                     let isCanvasRectSelected  = capturedLocations.findIndex(capturedLocation => currentX >= capturedLocation.x && currentX <= capturedLocation.x + capturedLocation.width && currentY >= capturedLocation.y && currentY <= capturedLocation.y + capturedLocation.height);
 
                     if(isCanvasRectSelected > -1){
-                        holdBtn.setAttribute('actionIndex', isCanvasRectSelected);
-                        conditionalBtn.setAttribute('actionIndex', isCanvasRectSelected);
-                        unconditionalBtn.setAttribute('actionIndex', isCanvasRectSelected);
-                        settledBtn.setAttribute('actionIndex', isCanvasRectSelected);
-                        availableBtn.setAttribute('actionIndex', isCanvasRectSelected);
+                        // holdBtn.setAttribute('actionIndex', isCanvasRectSelected);
+                        // conditionalBtn.setAttribute('actionIndex', isCanvasRectSelected);
+                        // unconditionalBtn.setAttribute('actionIndex', isCanvasRectSelected);
+                        // settledBtn.setAttribute('actionIndex', isCanvasRectSelected);
+                        // availableBtn.setAttribute('actionIndex', isCanvasRectSelected);
                         annotateBtn.setAttribute('actionIndex', isCanvasRectSelected);
                         annotationSaveBtn.setAttribute('actionIndex', isCanvasRectSelected);
                         annotationTxt.setAttribute('actionIndex', isCanvasRectSelected);
                         deleteBtn.setAttribute('actionIndex', isCanvasRectSelected);
                         infoBtn.setAttribute('actionIndex', isCanvasRectSelected);
 
-                        holdBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                        conditionalBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                        unconditionalBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                        settledBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                        availableBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        // holdBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        // conditionalBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        // unconditionalBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        // settledBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        // availableBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
                         annotateBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
                         deleteBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
                         infoBtn.setAttribute('style', `display: block; cursor: pointer; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
@@ -503,22 +531,22 @@
                         actionLabel.textContent = capturedLocations[curSelectedIndexRec].annotation ? capturedLocations[curSelectedIndexRec].annotation  : "Not Specified"
                         dispatchArrayUpdateEvent();
                     }else{
-                        holdBtn.removeAttribute('actionIndex');
-                        conditionalBtn.removeAttribute('actionIndex');
-                        unconditionalBtn.removeAttribute('actionIndex');
-                        settledBtn.removeAttribute('actionIndex');
-                        availableBtn.removeAttribute('actionIndex');
+                        // holdBtn.removeAttribute('actionIndex');
+                        // conditionalBtn.removeAttribute('actionIndex');
+                        // unconditionalBtn.removeAttribute('actionIndex');
+                        // settledBtn.removeAttribute('actionIndex');
+                        // availableBtn.removeAttribute('actionIndex');
                         annotateBtn.removeAttribute('actionIndex');
                         annotationSaveBtn.removeAttribute('actionIndex');
                         annotationTxt.removeAttribute('actionIndex');
                         deleteBtn.removeAttribute('actionIndex');
                         infoBtn.removeAttribute('actionIndex');
                         
-                        holdBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                        conditionalBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                        unconditionalBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                        settledBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
-                        availableBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        // holdBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        // conditionalBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        // unconditionalBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        // settledBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
+                        // availableBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
                         annotateBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
                         deleteBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
                         infoBtn.setAttribute('style', `cursor: not-allowed; color: #4a4a4a; padding: 0px 10px 2px 10px; border-bottom: 1px solid #fff;`);
